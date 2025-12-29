@@ -1,6 +1,6 @@
 #pragma once
 
-#include <JuceHeader.h>
+#include <juce_audio_processors/juce_audio_processors.h>
 
 class PhuArpAudioProcessor : public juce::AudioProcessor
 {
@@ -18,6 +18,7 @@ public:
     const juce::String getName() const override;
     bool acceptsMidi() const override;
     bool producesMidi() const override;
+    bool isMidiEffect() const override;
     double getTailLengthSeconds() const override;
 
     int getNumPrograms() override;
