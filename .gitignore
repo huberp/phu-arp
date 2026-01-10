@@ -1,0 +1,13 @@
+# Build directories
+build/
+cmake-build-*/
+
+# IDE directories
+.vs/
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+_codeql_detected_source_root
