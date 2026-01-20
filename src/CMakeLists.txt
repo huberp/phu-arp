@@ -14,17 +14,27 @@ target_sources(phu-arp PRIVATE
     PluginProcessor.h
     PluginEditor.cpp
     PluginEditor.h
+    EditorLogger.cpp
+    EditorLogger.h
+    ChordNotesTracker.h
+    PatternTracker.h
+    ChordPatternCoordinator.h
 )
 
 target_compile_definitions(phu-arp PUBLIC
     JUCE_WEB_BROWSER=0
     JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
+    JUCE_USE_CAMERA=0
+    JUCE_USE_MP3AUDIOFORMAT=0
+    JUCE_USE_OGGVORBIS=0
+    JUCE_USE_FLAC=0
 )
 
 target_link_libraries(phu-arp
     PRIVATE
-        juce::juce_audio_utils
+        EventSystem
+        juce::juce_audio_processors
     PUBLIC
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags
