@@ -2,6 +2,8 @@
 
 #include <juce_core/juce_core.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <atomic>
+#include <array>
 
 // Forward declaration
 class PhuArpAudioProcessorEditor;
@@ -24,6 +26,14 @@ class EditorLogger : public juce::Logger,
 public:
     EditorLogger() = default;
     ~EditorLogger() override = default;
+
+    /**
+     * Mark the calling thread as the audio thread for this plugin instance.
+     *
+     * This enables lock-free, allocation-free queueing of log messages from the audio thread
+     * (SPSC: audio thread producer -> message thread consumer).
+     */
+    void markCurrentThreadAsAudioThread() noexcept;
     
     /**
      * Set the editor that will receive log messages
@@ -50,12 +60,37 @@ protected:
     void handleAsyncUpdate() override;
     
 private:
-    // Thread-safe message queue
-    juce::CriticalSection messageLock;
+    // ---------------------------------------------------------------------
+    // Real-time queue (SPSC): only the audio thread is allowed to push here.
+    // ---------------------------------------------------------------------
+    static constexpr int rtQueueCapacity = 1024;
+    static constexpr size_t rtMaxMessageBytes = 256;
+
+    struct RtSlot {
+        std::array<char, rtMaxMessageBytes> text{};
+        uint16_t length = 0;
+    };
+
+    juce::AbstractFifo rtFifo { rtQueueCapacity };
+    std::array<RtSlot, rtQueueCapacity> rtSlots;
+    std::atomic<uint32_t> rtDroppedMessages { 0 };
+
+    std::atomic<uintptr_t> audioThreadId { 0 };
+
+    // ---------------------------------------------------------------------
+    // Non-real-time queue: safe for any thread, uses a lock.
+    // ---------------------------------------------------------------------
+    juce::CriticalSection nonRealtimeLock;
     juce::StringArray pendingMessages;
+
+    // Coalesce async updates so we don't spam the message queue.
+    std::atomic<bool> asyncUpdateRequested { false };
     
     // Safe pointer to editor (automatically nulled when editor is destroyed)
     juce::Component::SafePointer<PhuArpAudioProcessorEditor> editor;
+
+    void requestAsyncUpdate() noexcept;
+    void pushRealtime(const juce::String& message) noexcept;
     
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(EditorLogger)
 };

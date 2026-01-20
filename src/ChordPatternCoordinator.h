@@ -6,6 +6,7 @@
 #include "EditorLogger.h"
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <algorithm>
+#include <vector>
 
 /**
  * ChordPatternCoordinator
@@ -49,6 +50,11 @@ private:
     ChordNotesTracker& chordTracker;
     PatternTracker& patternTracker;
     int rhythmRootNote;                    // Root note for rhythm pattern (default: C1 = 24)
+
+    // Scratch buffers reused per audio block to avoid heap churn on the audio thread.
+    // (Performance/RT-safety improvement: avoids per-block allocations.)
+    std::vector<TimedEvent> tempEventBuffer;
+    std::vector<TimedEvent> outputEvents;
     
     static constexpr int CHORD_INPUT_CHANNEL = 1;
     static constexpr int RHYTHM_INPUT_CHANNEL = 16;
@@ -113,16 +119,20 @@ public:
         // Step 1: Copy all events to temporary buffer for ordered processing
         // We need to do this because the DAW might provide events sorted by channel,
         // but we need to process them in a specific order
-        std::vector<TimedEvent> tempEventBuffer;
-        tempEventBuffer.reserve(midiBuffer.getNumEvents());
+        tempEventBuffer.clear();
+        if (tempEventBuffer.capacity() < static_cast<size_t>(midiBuffer.getNumEvents())) {
+            tempEventBuffer.reserve(midiBuffer.getNumEvents());
+        }
         
         for (const auto metadata : midiBuffer) {
             tempEventBuffer.emplace_back(metadata.getMessage(), metadata.samplePosition);
         }
         
         // Prepare output events buffer
-        std::vector<TimedEvent> outputEvents;
-        outputEvents.reserve(tempEventBuffer.size());
+        outputEvents.clear();
+        if (outputEvents.capacity() < tempEventBuffer.size()) {
+            outputEvents.reserve(tempEventBuffer.size());
+        }
 
         // Step 2: Make event processing time-causal.
         // This directly addresses edge cases 1, 2, 3 by ensuring we never reorder events

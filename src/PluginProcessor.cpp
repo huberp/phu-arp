@@ -34,6 +34,10 @@ PhuArpAudioProcessor::~PhuArpAudioProcessor()
 void PhuArpAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
     syncGlobals.updateSampleRate(sampleRate);
+
+    // Mark the current thread as the audio thread for realtime-safe logging.
+    if (editorLogger)
+        editorLogger->markCurrentThreadAsAudioThread();
 }
 
 void PhuArpAudioProcessor::releaseResources() {}
@@ -52,11 +56,12 @@ void PhuArpAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
     );
     
     // Test logging (can be removed later)
-    static int blockCount = 0;
-    if (++blockCount % 1000 == 0)
+    const auto currentRun = syncGlobals.getCurrentRun();
+    if (currentRun % 1000 == 0)
     {
-        LOG_MESSAGE("Processed " + juce::String(blockCount) + " audio blocks");
+        LOG_MESSAGE("Processed " + juce::String(currentRun) + " audio blocks");
     }
+
     if(syncGlobals.isDawPlaying()) {
         // Process chord pattern coordination
         coordinator.processBlock(midiMessages);

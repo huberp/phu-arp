@@ -70,7 +70,7 @@ private:
     } ppqBase;
     
     // Global state
-    int runs = 0;                      // Number of processBlock calls
+    long runs = 0;                      // Number of processBlock calls
     long long samplesCount = 0;        // Total samples processed
     double sampleRate = -1.0;
     double sampleRateByMsec = -1.0;    // Samples per millisecond
@@ -95,7 +95,14 @@ public:
         runs++;
         samplesCount += numSamples;
     }
-    
+
+    /**
+     * Get current run count, i.e. number of processBlock calls
+     * Method finishRun increments this value
+     */
+    long getCurrentRun() const {
+        return runs;
+    }
     /**
      * Get total samples processed
      */
