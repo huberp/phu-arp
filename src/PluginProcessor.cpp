@@ -1,22 +1,85 @@
 #include "PluginProcessor.h"
+#include "PluginEditor.h"
+#include "EditorLogger.h"
+#include "../lib/EventSource.h"
 
 PhuArpAudioProcessor::PhuArpAudioProcessor()
     : AudioProcessor(BusesProperties()) // MIDI effect - no audio buses
+    , patternTracker(chordTracker)
+    , coordinator(chordTracker, patternTracker)
+    , editorLogger(std::make_unique<EditorLogger>())
 {
+    // Register coordinator as listener for DAW global events
+    syncGlobals.addEventListener(&coordinator);
+    
+    // Set our logger as the global JUCE logger
+    juce::Logger::setCurrentLogger(editorLogger.get());
+    
+    // Log initialization
+    LOG_MESSAGE("PhuArp plugin initialized");
 }
 
-PhuArpAudioProcessor::~PhuArpAudioProcessor() {}
+PhuArpAudioProcessor::~PhuArpAudioProcessor() 
+{
+    // Unregister from events
+    syncGlobals.removeEventListener(&coordinator);
+    
+    // Clear logger if it's ours
+    if (juce::Logger::getCurrentLogger() == editorLogger.get())
+    {
+        juce::Logger::setCurrentLogger(nullptr);
+    }
+}
 
-void PhuArpAudioProcessor::prepareToPlay(double, int) {}
+void PhuArpAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
+{
+    syncGlobals.updateSampleRate(sampleRate);
+}
+
 void PhuArpAudioProcessor::releaseResources() {}
 
-void PhuArpAudioProcessor::processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer& midiMessages)
+void PhuArpAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
-    // MIDI processing only
+    // Get playhead position info
+    auto playHeadPtr = getPlayHead();
+    auto positionInfo = playHeadPtr ? playHeadPtr->getPosition() : juce::Optional<juce::AudioPlayHead::PositionInfo>();
+    
+    // Update DAW globals
+    syncGlobals.updateDAWGlobals(
+        buffer,
+        midiMessages,
+        positionInfo
+    );
+    
+    // Test logging (can be removed later)
+    static int blockCount = 0;
+    if (++blockCount % 1000 == 0)
+    {
+        LOG_MESSAGE("Processed " + juce::String(blockCount) + " audio blocks");
+    }
+    if(syncGlobals.isDawPlaying()) {
+        // Process chord pattern coordination
+        coordinator.processBlock(midiMessages);
+    }
+    // Mark end of processing
+    syncGlobals.finishRun(buffer.getNumSamples());
 }
 
-juce::AudioProcessorEditor* PhuArpAudioProcessor::createEditor() { return nullptr; }
-bool PhuArpAudioProcessor::hasEditor() const { return false; }
+juce::AudioProcessorEditor* PhuArpAudioProcessor::createEditor() 
+{ 
+    auto* editor = new PhuArpAudioProcessorEditor(*this);
+    
+    // Register editor with logger
+    if (editorLogger)
+    {
+        editorLogger->setEditor(editor);
+        LOG_MESSAGE("Editor opened");
+    }
+    
+    return editor;
+}
+
+bool PhuArpAudioProcessor::hasEditor() const { return true; }
 
 const juce::String PhuArpAudioProcessor::getName() const { return "PhuArp"; }
 bool PhuArpAudioProcessor::acceptsMidi() const { return true; }

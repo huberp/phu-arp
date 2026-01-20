@@ -1,8 +1,15 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include "..\lib\SyncGlobals.h"
+#include "ChordNotesTracker.h"
+#include "PatternTracker.h"
+#include "ChordPatternCoordinator.h"
 
-class PhuArpAudioProcessor : public juce::AudioProcessor
+class EditorLogger;
+
+class PhuArpAudioProcessor : public juce::AudioProcessor,
+                               public GlobalsEventListener
 {
 public:
     PhuArpAudioProcessor();
@@ -29,7 +36,21 @@ public:
 
     void getStateInformation(juce::MemoryBlock& destData) override;
     void setStateInformation(const void* data, int sizeInBytes) override;
+    
+    // Get the editor logger (for editor registration)
+    EditorLogger* getEditorLogger() const { return editorLogger.get(); }
 
 private:
+    // DAW synchronization globals (each instance has its own)
+    SyncGlobals syncGlobals;
+    
+    // Chord pattern processing components (each instance has its own)
+    ChordNotesTracker chordTracker;
+    PatternTracker patternTracker;
+    ChordPatternCoordinator coordinator;
+    
+    // Logger for editor log view
+    std::unique_ptr<EditorLogger> editorLogger;
+    
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PhuArpAudioProcessor)
 };

@@ -1,9 +1,53 @@
 #pragma once
 
 #include "EventSource.h"
+#include "SyncGlobalsListener.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <cstddef>
-
+/**
+ * EventSource for GLOBALS events
+ * 
+ * Manages listeners for BPM, IsPlaying, and SampleRate events.
+ * Mirrors the Lua EventSource mixed into GLOBALS table.
+ * 
+ * Usage:
+ *   GlobalsEventSource globals;
+ *   globals.addEventListener(&myListener);
+ *   globals.fireBPMChanged(bpmEvent);
+ */
+class GlobalsEventSource : public EventSource<GlobalsEventListener> {
+public:
+    /**
+     * Fire a BPM changed event to all listeners
+     * @param event The BPM event to fire
+     */
+    void fireBPMChanged(const BPMEvent& event) {
+        // Iterate by index to handle potential modifications during iteration
+        for (size_t i = 0; i < listeners.size(); ++i) {
+            listeners[i]->onBPMChanged(event);
+        }
+    }
+    
+    /**
+     * Fire an IsPlaying changed event to all listeners
+     * @param event The IsPlaying event to fire
+     */
+    void fireIsPlayingChanged(const IsPlayingEvent& event) {
+        for (size_t i = 0; i < listeners.size(); ++i) {
+            listeners[i]->onIsPlayingChanged(event);
+        }
+    }
+    
+    /**
+     * Fire a SampleRate changed event to all listeners
+     * @param event The SampleRate event to fire
+     */
+    void fireSampleRateChanged(const SampleRateEvent& event) {
+        for (size_t i = 0; i < listeners.size(); ++i) {
+            listeners[i]->onSampleRateChanged(event);
+        }
+    }
+};
 /**
  * SyncGlobals - Singleton that tracks DAW global state
  * 
@@ -35,23 +79,13 @@ private:
     double msecPerBeat = 0.0;          // Based on whole note
     double samplesPerBeat = 0.0;       // Based on whole note
     
-    // Singleton instance
-    static SyncGlobals instance;
-    
-    // Private constructor for singleton
+public:
+    // Default constructor
     SyncGlobals() = default;
     
-public:
     // Delete copy constructor and assignment
     SyncGlobals(const SyncGlobals&) = delete;
     SyncGlobals& operator=(const SyncGlobals&) = delete;
-    
-    /**
-     * Get singleton instance
-     */
-    static SyncGlobals& getInstance() {
-        return instance;
-    }
     
     /**
      * Mark end of processing run
@@ -135,41 +169,40 @@ public:
         ctx.positionInfo = &positionInfo;
         ctx.epoch = runs;
         
-        // In a real implementation, you would extract BPM and isPlaying from position
-        // For now, this is a placeholder structure
-        // double newBPM = extractBPM(position);
-        // bool newIsPlaying = extractIsPlaying(position);
+        // Extract playing state from position info
         
-        // Example: Check BPM change
-        // if (newBPM != bpm) {
-        //     BPMEvent event;
-        //     event.source = this;
-        //     event.context = ctx;
-        //     event.oldValues = {bpm, msecPerBeat, samplesPerBeat};
-        //     
-        //     // Update values
-        //     bpm = newBPM;
-        //     msecPerBeat = ppqBase.msec / newBPM;
-        //     samplesPerBeat = msecPerBeat * sampleRateByMsec;
-        //     
-        //     event.newValues = {bpm, msecPerBeat, samplesPerBeat};
-        //     fireBPMChanged(event);
-        // }
+        if (positionInfo.hasValue()) {
+            // Extract BPM if available
+            if (auto bpmValue = positionInfo->getBpm()) {
+                double newBPM = *bpmValue;
+                if (newBPM != bpm && newBPM > 0.0) {
+                    BPMEvent event;
+                    event.source = this;
+                    event.context = ctx;
+                    event.oldValues = {bpm, msecPerBeat, samplesPerBeat};
+                    
+                    // Update values
+                    bpm = newBPM;
+                    msecPerBeat = ppqBase.msec / newBPM;
+                    samplesPerBeat = msecPerBeat * sampleRateByMsec;
+                    
+                    event.newValues = {bpm, msecPerBeat, samplesPerBeat};
+                    fireBPMChanged(event);
+                }
+            }
         
-        // Example: Check playing state change
-        // if (newIsPlaying != isPlaying) {
-        //     IsPlayingEvent event;
-        //     event.source = this;
-        //     event.context = ctx;
-        //     event.oldValue = isPlaying;
-        //     event.newValue = newIsPlaying;
-        //     isPlaying = newIsPlaying;
-        //     fireIsPlayingChanged(event);
-        // }
-        
+            bool newIsPlaying = positionInfo->getIsPlaying();
+            // Check playing state change
+            if (newIsPlaying != isPlaying) {
+                IsPlayingEvent event;
+                event.source = this;
+                event.context = ctx;
+                event.oldValue = isPlaying;
+                event.newValue = newIsPlaying;
+                isPlaying = newIsPlaying;
+                fireIsPlayingChanged(event);
+            }
+        }
         return ctx;
     }
 };
-
-// Define the singleton instance
-inline SyncGlobals SyncGlobals::instance;

@@ -3,7 +3,6 @@
 #include <vector>
 #include <algorithm>
 #include "Event.h"
-#include "EventListener.h"
 
 /**
  * Base EventSource template
@@ -52,74 +51,5 @@ public:
      */
     size_t getListenerCount() const {
         return listeners.size();
-    }
-};
-
-/**
- * EventSource for GLOBALS events
- * 
- * Manages listeners for BPM, IsPlaying, and SampleRate events.
- * Mirrors the Lua EventSource mixed into GLOBALS table.
- * 
- * Usage:
- *   GlobalsEventSource globals;
- *   globals.addEventListener(&myListener);
- *   globals.fireBPMChanged(bpmEvent);
- */
-class GlobalsEventSource : public EventSource<GlobalsEventListener> {
-public:
-    /**
-     * Fire a BPM changed event to all listeners
-     * @param event The BPM event to fire
-     */
-    void fireBPMChanged(const BPMEvent& event) {
-        // Iterate by index to handle potential modifications during iteration
-        for (size_t i = 0; i < listeners.size(); ++i) {
-            listeners[i]->onBPMChanged(event);
-        }
-    }
-    
-    /**
-     * Fire an IsPlaying changed event to all listeners
-     * @param event The IsPlaying event to fire
-     */
-    void fireIsPlayingChanged(const IsPlayingEvent& event) {
-        for (size_t i = 0; i < listeners.size(); ++i) {
-            listeners[i]->onIsPlayingChanged(event);
-        }
-    }
-    
-    /**
-     * Fire a SampleRate changed event to all listeners
-     * @param event The SampleRate event to fire
-     */
-    void fireSampleRateChanged(const SampleRateEvent& event) {
-        for (size_t i = 0; i < listeners.size(); ++i) {
-            listeners[i]->onSampleRateChanged(event);
-        }
-    }
-};
-
-/**
- * EventSource for BUFFERS events
- * 
- * Manages listeners for buffer configuration changes.
- * Mirrors the Lua EventSource mixed into BUFFERS table.
- * 
- * Usage:
- *   BufferEventSource buffers;
- *   buffers.addEventListener(&myListener);
- *   buffers.fireBuffersChanged(buffersEvent);
- */
-class BufferEventSource : public EventSource<BufferEventListener> {
-public:
-    /**
-     * Fire a buffers changed event to all listeners
-     * @param event The buffer event to fire
-     */
-    void fireBuffersChanged(const BuffersChangedEvent& event) {
-        for (size_t i = 0; i < listeners.size(); ++i) {
-            listeners[i]->onBuffersChanged(event);
-        }
     }
 };
