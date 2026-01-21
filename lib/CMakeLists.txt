@@ -11,3 +11,4 @@ target_sources(EventSystem INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/EventSource.h
     ${CMAKE_CURRENT_SOURCE_DIR}/SyncGlobals.h
 )
+ 

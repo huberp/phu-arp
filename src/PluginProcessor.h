@@ -40,6 +40,10 @@ public:
     // Get the editor logger (for editor registration)
     EditorLogger* getEditorLogger() const { return editorLogger.get(); }
 
+    // UI-facing parameter: pass-through MIDI on other channels
+    void setPassThroughOtherMidi(bool shouldPassThrough) noexcept { coordinator.setPassThroughOtherMidi(shouldPassThrough); }
+    bool getPassThroughOtherMidi() const noexcept { return coordinator.getPassThroughOtherMidi(); }
+
 private:
     // DAW synchronization globals (each instance has its own)
     SyncGlobals syncGlobals;

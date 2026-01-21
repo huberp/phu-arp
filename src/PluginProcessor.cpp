@@ -11,24 +11,18 @@ PhuArpAudioProcessor::PhuArpAudioProcessor()
 {
     // Register coordinator as listener for DAW global events
     syncGlobals.addEventListener(&coordinator);
-    
-    // Set our logger as the global JUCE logger
-    juce::Logger::setCurrentLogger(editorLogger.get());
+
+    // Route coordinator logs to this instance's logger
+    coordinator.setLogger(editorLogger.get());
     
     // Log initialization
-    LOG_MESSAGE("PhuArp plugin initialized");
+    LOG_MESSAGE(editorLogger.get(), "PhuArp plugin initialized");
 }
 
 PhuArpAudioProcessor::~PhuArpAudioProcessor() 
 {
     // Unregister from events
     syncGlobals.removeEventListener(&coordinator);
-    
-    // Clear logger if it's ours
-    if (juce::Logger::getCurrentLogger() == editorLogger.get())
-    {
-        juce::Logger::setCurrentLogger(nullptr);
-    }
 }
 
 void PhuArpAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
@@ -59,7 +53,7 @@ void PhuArpAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
     const auto currentRun = syncGlobals.getCurrentRun();
     if (currentRun % 1000 == 0)
     {
-        LOG_MESSAGE("Processed " + juce::String(currentRun) + " audio blocks");
+        LOG_MESSAGE(editorLogger.get(), "Processed " + juce::String(currentRun) + " audio blocks");
     }
 
     if(syncGlobals.isDawPlaying()) {
@@ -78,7 +72,7 @@ juce::AudioProcessorEditor* PhuArpAudioProcessor::createEditor()
     if (editorLogger)
     {
         editorLogger->setEditor(editor);
-        LOG_MESSAGE("Editor opened");
+        LOG_MESSAGE(editorLogger.get(), "Editor opened");
     }
     
     return editor;

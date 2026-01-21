@@ -6,6 +6,7 @@
 #include "EditorLogger.h"
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <algorithm>
+#include <atomic>
 #include <vector>
 
 /**
@@ -50,15 +51,25 @@ private:
     ChordNotesTracker& chordTracker;
     PatternTracker& patternTracker;
     int rhythmRootNote;                    // Root note for rhythm pattern (default: C1 = 24)
+    EditorLogger* logger = nullptr;        // Instance-scoped logger (optional)
+
+    // If true, MIDI on channels other than chord/rhythm/output will be preserved.
+    // MIDI on chord/rhythm/output channels is consumed/replaced by this processor.
+    std::atomic<bool> passThroughOtherMidi { false };
+
+    // MIDI routing channels (1..16)
+    int chordInputChannel = 1;
+    int rhythmInputChannel = 16;
+    int outputChannel = 2;
 
     // Scratch buffers reused per audio block to avoid heap churn on the audio thread.
     // (Performance/RT-safety improvement: avoids per-block allocations.)
     std::vector<TimedEvent> tempEventBuffer;
     std::vector<TimedEvent> outputEvents;
     
-    static constexpr int CHORD_INPUT_CHANNEL = 1;
-    static constexpr int RHYTHM_INPUT_CHANNEL = 16;
-    static constexpr int OUTPUT_CHANNEL = 2;
+    static constexpr int defaultChordInputChannel = 1;
+    static constexpr int defaultRhythmInputChannel = 16;
+    static constexpr int defaultOutputChannel = 2;
 
 public:
     /**
@@ -69,11 +80,31 @@ public:
      */
     ChordPatternCoordinator(ChordNotesTracker& chordTracker, 
                            PatternTracker& patternTracker,
-                           int rootNote = 24)
+                           int rootNote = 24,
+                           EditorLogger* loggerToUse = nullptr)
         : chordTracker(chordTracker)
         , patternTracker(patternTracker)
         , rhythmRootNote(rootNote)
+        , logger(loggerToUse)
+        , chordInputChannel(defaultChordInputChannel)
+        , rhythmInputChannel(defaultRhythmInputChannel)
+        , outputChannel(defaultOutputChannel)
     {}
+
+    void setLogger(EditorLogger* loggerToUse) noexcept { logger = loggerToUse; }
+    EditorLogger* getLogger() const noexcept { return logger; }
+
+    void setChordInputChannel(int channel) noexcept { chordInputChannel = channel; }
+    int getChordInputChannel() const noexcept { return chordInputChannel; }
+
+    void setRhythmInputChannel(int channel) noexcept { rhythmInputChannel = channel; }
+    int getRhythmInputChannel() const noexcept { return rhythmInputChannel; }
+
+    void setOutputChannel(int channel) noexcept { outputChannel = channel; }
+    int getOutputChannel() const noexcept { return outputChannel; }
+
+    void setPassThroughOtherMidi(bool shouldPassThrough) noexcept { passThroughOtherMidi.store(shouldPassThrough, std::memory_order_relaxed); }
+    bool getPassThroughOtherMidi() const noexcept { return passThroughOtherMidi.load(std::memory_order_relaxed); }
     
     /**
      * Set the rhythm root note
@@ -113,9 +144,14 @@ public:
      * - Some cases (e.g. "same output pitch from multiple triggers") require voice ownership/ref-counting
      *   beyond what plain MIDI note-on/off semantics can guarantee.
      *
-     * @param midiBuffer The MIDI buffer to process (will be cleared and filled with output events)
+    * @param midiBuffer The MIDI buffer to process.
+    *                  If passThroughOtherMidi is false, it will be cleared and filled with output events.
+    *                  If passThroughOtherMidi is true, only events on the chord/rhythm/output channels are removed
+    *                  and other channels are preserved.
      */
     void processBlock(juce::MidiBuffer& midiBuffer) {
+        const bool passThrough = getPassThroughOtherMidi();
+
         // Step 1: Copy all events to temporary buffer for ordered processing
         // We need to do this because the DAW might provide events sorted by channel,
         // but we need to process them in a specific order
@@ -147,7 +183,7 @@ public:
         };
         auto phasePriority = [&](const juce::MidiMessage& msg) -> int {
             const int ch = msg.getChannel();
-            if (ch == RHYTHM_INPUT_CHANNEL) {
+            if (ch == rhythmInputChannel) {
                 if (isNoteOffLike(msg)) {
                     return 0;
                 }
@@ -155,7 +191,7 @@ public:
                     return 2;
                 }
             }
-            if (ch == CHORD_INPUT_CHANNEL) {
+            if (ch == chordInputChannel) {
                 if (msg.isNoteOn() || isNoteOffLike(msg)) {
                     return 1;
                 }
@@ -179,7 +215,7 @@ public:
             auto stoppedNotes = patternTracker.stopPlayingNotesForRhythmOwner(rhythmNoteNumber);
             for (const auto& stopped : stoppedNotes) {
                 auto noteOffMsg = juce::MidiMessage::noteOff(
-                    OUTPUT_CHANNEL,
+                    outputChannel,
                     stopped.getNoteNumber(),
                     static_cast<juce::uint8>(stopped.getVelocity())
                 );
@@ -212,14 +248,14 @@ public:
                 rhythmNoteNumber,
                 actualNote,
                 velocity,
-                OUTPUT_CHANNEL,
+                outputChannel,
                 chordIndex,
                 octaveOffset
             );
 
             // Emit note-on at the actual sample position (no -1 shifting).
             // Addresses edge case 10.
-            auto noteOnMsg = juce::MidiMessage::noteOn(OUTPUT_CHANNEL, actualNote, velocity);
+            auto noteOnMsg = juce::MidiMessage::noteOn(outputChannel, actualNote, velocity);
             outputEvents.emplace_back(noteOnMsg, samplePosition);
         };
 
@@ -227,7 +263,7 @@ public:
         for (const auto& evt : tempEventBuffer) {
             const auto& msg = evt.message;
 
-            if (msg.getChannel() == RHYTHM_INPUT_CHANNEL) {
+            if (msg.getChannel() == rhythmInputChannel) {
                 if (isNoteOffLike(msg)) {
                     stopRhythmOwnedNotes(evt.samplePosition, msg.getNoteNumber());
                 } else if (msg.isNoteOn()) {
@@ -236,7 +272,7 @@ public:
                 continue;
             }
 
-            if (msg.getChannel() == CHORD_INPUT_CHANNEL) {
+            if (msg.getChannel() == chordInputChannel) {
                 if (msg.isNoteOn() && msg.getVelocity() > 0) {
                     chordTracker.insertChordNote(
                         msg.getNoteNumber(),
@@ -250,10 +286,33 @@ public:
             }
         }
         
-        // Step 5: Fill MIDI buffer with prepared output events
-        midiBuffer.clear();
-        for (const auto& evt : outputEvents) {
-            midiBuffer.addEvent(evt.message, evt.samplePosition);
+        // Step 5: Write back to the MIDI buffer
+        if (passThrough) {
+            // Keep everything except chord/rhythm/output channels, then add generated output.
+            juce::MidiBuffer filtered;
+
+            for (const auto metadata : midiBuffer) {
+                const auto& msg = metadata.getMessage();
+                const bool isConsumed =
+                    msg.isForChannel(chordInputChannel) ||
+                    msg.isForChannel(rhythmInputChannel) ||
+                    msg.isForChannel(outputChannel);
+
+                if (!isConsumed) {
+                    filtered.addEvent(msg, metadata.samplePosition);
+                }
+            }
+
+            for (const auto& evt : outputEvents) {
+                filtered.addEvent(evt.message, evt.samplePosition);
+            }
+
+            midiBuffer.swapWith(filtered);
+        } else {
+            midiBuffer.clear();
+            for (const auto& evt : outputEvents) {
+                midiBuffer.addEvent(evt.message, evt.samplePosition);
+            }
         }
     }
     
@@ -265,7 +324,7 @@ public:
         // When DAW stops playing, clear all notes and chord
         if (event.oldValue == true && event.newValue == false)
         {
-            LOG_MESSAGE("DAW stopped - cleaning up notes");
+            LOG_MESSAGE(logger, "DAW stopped - cleaning up notes");
             
             // Get the MIDI buffer from the event context
             auto* midiBuffer = const_cast<juce::MidiBuffer*>(event.context.midiBuffer);
@@ -274,9 +333,9 @@ public:
             {
                 midiBuffer->clear();
                 // Get note-off events for all playing notes before clearing
-                auto noteOffs = patternTracker.getAllPlayingNotesAsNoteOffs(OUTPUT_CHANNEL);
+                auto noteOffs = patternTracker.getAllPlayingNotesAsNoteOffs(outputChannel);
                 
-                LOG_MESSAGE("Sending " + juce::String(noteOffs.size()) + " note-off events");
+                LOG_MESSAGE(logger, "Sending " + juce::String(noteOffs.size()) + " note-off events");
                 
                 // Add note-offs directly to the MIDI buffer at sample position 0
                 for (const auto& noteOff : noteOffs)
@@ -290,7 +349,7 @@ public:
             
             // Clear all stored chord notes
             chordTracker.clearChord();
-            LOG_MESSAGE("Cleared all playing notes and chord");
+            LOG_MESSAGE(logger, "Cleared all playing notes and chord");
         }
     }
 

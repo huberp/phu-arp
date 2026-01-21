@@ -15,10 +15,10 @@ class PhuArpAudioProcessorEditor;
  * Thread-safe and uses AsyncUpdater to ensure GUI updates happen on the message thread.
  * 
  * Usage:
- *   Logger::setCurrentLogger(editorLogger.get());
- *   Logger::getCurrentLogger()->writeToLog("Your message");
+ *   // Call the instance logger directly (do NOT install it as the global JUCE logger)
+ *   editorLogger->logMessage("Your message");
  *   // or
- *   LOG_MESSAGE("Your message");
+ *   LOG_MESSAGE(editorLogger, "Your message");
  */
 class EditorLogger : public juce::Logger,
                      public juce::AsyncUpdater
@@ -95,9 +95,9 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(EditorLogger)
 };
 
-// Convenience macro for logging
-#define LOG_MESSAGE(msg) \
+// Convenience macro for instance-scoped logging
+#define LOG_MESSAGE(loggerPtr, msg) \
     do { \
-        if (auto* logger = juce::Logger::getCurrentLogger()) \
-            logger->writeToLog(msg); \
+        if ((loggerPtr) != nullptr) \
+            (loggerPtr)->logMessage((msg)); \
     } while(0)

@@ -23,13 +23,13 @@ This is a C++ translation of the Lua EventSource pattern used in ProtoplugScript
 ## File Structure
 
 ```
-cpp-src/
-├── Event.h              # Event class hierarchy
-├── EventListener.h      # Listener interfaces
-├── EventSource.h        # EventSource implementations
-├── SyncGlobals.h        # Singleton GLOBALS (like Lua SyncGlobals)
-├── ExampleUsage.cpp     # Complete usage examples
-└── README.md            # This file
+lib/
+├── Event.h               # Event class hierarchy
+├── EventSource.h         # EventSource implementations + listener registration
+├── SyncGlobals.h         # Singleton GLOBALS (like Lua SyncGlobals)
+├── SyncGlobalsListener.h # Listener interfaces (GlobalsEventListener, ...)
+├── ExampleUsage.cpp      # Standalone usage examples
+└── README.md             # This file
 ```
 
 ## Architecture Mapping
@@ -145,6 +145,8 @@ To integrate with a real audio plugin (VST, AU, etc.):
 3. Implement `GlobalsEventListener` in your plugin components
 4. Register listeners with `addEventListener()`
 5. Clean up with `removeEventListener()` in destructors
+
+In this repository, `ChordPatternCoordinator` implements `GlobalsEventListener` so it can react to transport/tempo/sample-rate changes routed through `SyncGlobals`.
 
 ## Thread Safety Note
 
