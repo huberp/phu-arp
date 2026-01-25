@@ -223,7 +223,7 @@ public:
             }
         };
 
-        auto startRhythmOwnedNote = [&](int samplePosition, int rhythmNoteNumber) {
+        auto startRhythmOwnedNote = [&](int samplePosition, int rhythmNoteNumber, juce::uint8 rhythmVelocity) {
             // Ensure retriggers are clean for the same rhythm key.
             // Addresses edge case 8.
             stopRhythmOwnedNotes(samplePosition, rhythmNoteNumber);
@@ -239,7 +239,6 @@ public:
             }
 
             const int actualNote = chordNote->getNoteNumber() + octaveOffset;
-            const auto velocity = static_cast<juce::uint8>(chordNote->getVelocity());
 
             // Store the concrete output note for this rhythm trigger so future note-offs do not depend
             // on the *current* chord content/indexing.
@@ -247,7 +246,7 @@ public:
             patternTracker.startPlayingRhythmOwnedNote(
                 rhythmNoteNumber,
                 actualNote,
-                velocity,
+                rhythmVelocity,
                 outputChannel,
                 chordIndex,
                 octaveOffset
@@ -255,7 +254,7 @@ public:
 
             // Emit note-on at the actual sample position (no -1 shifting).
             // Addresses edge case 10.
-            auto noteOnMsg = juce::MidiMessage::noteOn(outputChannel, actualNote, velocity);
+            auto noteOnMsg = juce::MidiMessage::noteOn(outputChannel, actualNote, rhythmVelocity);
             outputEvents.emplace_back(noteOnMsg, samplePosition);
         };
 
@@ -267,7 +266,9 @@ public:
                 if (isNoteOffLike(msg)) {
                     stopRhythmOwnedNotes(evt.samplePosition, msg.getNoteNumber());
                 } else if (msg.isNoteOn()) {
-                    startRhythmOwnedNote(evt.samplePosition, msg.getNoteNumber());
+                    startRhythmOwnedNote(evt.samplePosition,
+                                        msg.getNoteNumber(),
+                                        static_cast<juce::uint8>(msg.getVelocity()));
                 }
                 continue;
             }
