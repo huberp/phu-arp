@@ -37,10 +37,15 @@ Rhythm notes in the C1 octave (24-35):
 - C1 (24) → chord index 0 → plays C4 (60)
 - C#1 (25) → chord index 1 → plays E4 (64)
 - D1 (26) → chord index 2 → plays G4 (67)
-- D#1 (27) → chord index 0 (wraps) → plays C4 (60)
-- E1 (28) → chord index 1 → plays E4 (64)
-- F1 (29) → chord index 2 → plays G4 (67)
-- ...and so on
+- D#1 (27) → chord index 3 → no note (chord only has 3 notes)
+- E1 (28) → chord index 4 → no note
+- F1 (29) → chord index 5 → no note
+- F#1 (30) → chord index 6 → no note
+- G1 (31) → chord index 7 → no note
+- G#1 (32) → chord index 8 → no note
+- A1 (33) → chord index 9 → no note
+- A#1 (34) → chord index 10 → no note
+- B1 (35) → chord index 11 → no note
 
 Rhythm notes in the C2 octave (36-47):
 - C2 (36) → chord index 0, octave +12 → plays C5 (72)
@@ -54,17 +59,23 @@ Rhythm notes in the C1 octave (24-35):
 - C#1 (25) → chord index 1 → plays E4 (64)
 - D1 (26) → chord index 2 → plays G4 (67)
 - D#1 (27) → chord index 3 → plays B4 (71)
-- E1 (28) → chord index 0 (wraps) → plays C4 (60)
-- F1 (29) → chord index 1 → plays E4 (64)
-- F#1 (30) → chord index 2 → plays G4 (67)
-- G1 (31) → chord index 3 → plays B4 (71)
+- E1 (28) → chord index 4 → no note (chord only has 4 notes)
+- F1 (29) → chord index 5 → no note
+- F#1 (30) → chord index 6 → no note
+- G1 (31) → chord index 7 → no note
+- G#1 (32) → chord index 8 → no note
+- A1 (33) → chord index 9 → no note
+- A#1 (34) → chord index 10 → no note
+- B1 (35) → chord index 11 → no note
 
 **Formula:**
 ```
 relativeNote = rhythmNote - rhythmRootNote
-chordIndex = abs(relativeNote % 12)        // which chord note to play
-octaveOffset = (relativeNote / 12) * 12    // octave adjustment
+chordIndex = relativeNote % 12             // 0-11, wraps around chord notes
+  (if negative, normalized to 0-11)
+octaveOffset = floor(relativeNote / 12) * 12  // octave adjustment
 outputNote = chordNote[chordIndex] + octaveOffset
+  (no note played if chord doesn't have enough notes)
 ```
 
 This design allows you to create rhythm patterns that cycle through chord notes, with different octaves accessible by playing higher or lower on your MIDI controller.
